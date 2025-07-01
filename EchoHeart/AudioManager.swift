@@ -9,31 +9,51 @@ class AudioManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let barCount = 15
     private var inputFormat: AVAudioFormat?
+    private let mainMixer: AVAudioMixerNode
 
     @Published var spectrumLevels: [Float]
 
     @Published var inputLevel: Float = 0.0  // 0〜1の範囲
+    
+    // 👇 ユーザーが調整する値
+    @Published var eqFrequency: Float {
+        didSet { UserDefaults.standard.set(eqFrequency, forKey: "eqFrequency") }
+    }
+
+    @Published var eqGain: Float {
+        didSet { UserDefaults.standard.set(eqGain, forKey: "eqGain") }
+    }
+
+    @Published var eqWidth: Float {
+        didSet { UserDefaults.standard.set(eqWidth, forKey: "eqWidth") }
+    }
+
+    @Published var masterVolume: Float {
+        didSet {
+            mainMixer.outputVolume = masterVolume
+            UserDefaults.standard.set(masterVolume, forKey: "masterVolume")
+        }
+    }
 
     init() {
         self.spectrumLevels = Array(repeating: 0.0, count: barCount)
-        setupEQ()
-    }
+        self.mainMixer = audioEngine.mainMixerNode
 
-    // 👇 ユーザーが調整する値
-    @Published var eqGain: Float = 10.0 {
-        didSet {
-            updateEQ()
-        }
-    }
-    @Published var eqFrequency: Float = 1000.0 {
-        didSet {
-            updateEQ()
-        }
-    }
-    @Published var eqWidth: Float = 1.5 {
-        didSet {
-            updateEQ()
-        }
+        // デフォルト値をあらかじめ登録
+        UserDefaults.standard.register(defaults: [
+            "eqFrequency": 1000,
+            "eqGain": 10,
+            "eqWidth": 1.5,
+            "masterVolume": 1.0
+        ])
+
+        // 登録されていればそれが使われる
+        self.eqFrequency = UserDefaults.standard.float(forKey: "eqFrequency")
+        self.eqGain = UserDefaults.standard.float(forKey: "eqGain")
+        self.eqWidth = UserDefaults.standard.float(forKey: "eqWidth")
+        self.masterVolume = UserDefaults.standard.float(forKey: "masterVolume")
+
+        setupEQ()
     }
 
     private func setupEQ() {
@@ -70,20 +90,18 @@ class AudioManager: ObservableObject {
             self.processAudioBuffer(buffer: buffer)
         }
 
-        let mixer = audioEngine.mainMixerNode
+//        let mixer = audioEngine.mainMixerNode
+        // アスカ様へ　増幅するのはここを設定するだけでＯＫ？
+//        mixer.outputVolume = 1.5 // 0.0〜1.0 だが、Floatで1.5に設定してみる
+
         let output = audioEngine.outputNode
-//        let eq = AVAudioUnitEQ(numberOfBands: 1)
-//        let band = eq.bands[0]
-//        band.filterType = .parametric
-//        band.frequency = eqFrequency  // 中心周波数
-//        band.bandwidth = eqWidth   // オクターブ幅（300Hz〜3kHzぐらい）
-//        band.gain = eqGain         // 増幅量（dB）
-//        band.bypass = false
+
         setupEQ()
         audioEngine.attach(eq)
         audioEngine.connect(inputNode, to: eq, format: format)
-        audioEngine.connect(eq, to: mixer, format: format)
-        audioEngine.connect(mixer, to: output, format: format)
+        audioEngine.connect(eq, to: mainMixer, format: format)
+//        audioEngine.connect(mixer, to: output, format: format)
+        audioEngine.connect(mainMixer, to: output, format: format)
 
         do {
             try audioEngine.start()
@@ -131,7 +149,7 @@ class AudioManager: ObservableObject {
 
                 // ここでspectrum計算（バンド分け）
                 let bandSize = magnitudes.count / barCount
-                for i in 1..<barCount {
+                for i in 0..<barCount {
                     let start = i * bandSize
                     let end = start + bandSize
                     let slice = magnitudes[start..<min(end, magnitudes.count)]
@@ -153,9 +171,6 @@ class AudioManager: ObservableObject {
 
         vDSP_destroy_fftsetup(fftSetup)
 
-//        DispatchQueue.main.async {
-//            self.spectrumLevels = spectrum
-//        }
     }
     
     func stopMicrophone() {
