@@ -90,9 +90,6 @@ class AudioManager: ObservableObject {
             self.processAudioBuffer(buffer: buffer)
         }
 
-//        let mixer = audioEngine.mainMixerNode
-        // アスカ様へ　増幅するのはここを設定するだけでＯＫ？
-//        mixer.outputVolume = 1.5 // 0.0〜1.0 だが、Floatで1.5に設定してみる
         mainMixer.outputVolume = masterVolume
         
         let output = audioEngine.outputNode
