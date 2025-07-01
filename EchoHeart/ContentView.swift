@@ -35,10 +35,9 @@ struct ContentView: View {
                             Spacer()
                             // アスカ様へ きれいなグラデーションにならない（レベルメータをが低いときも赤色になってしまう）
                             Rectangle()
-                                .fill(Color(hue: Double(audioManager.spectrumLevels[i]), saturation: 1.0, brightness: 0.9))
+                                .fill(Color(hue: (1.0 - Double(audioManager.spectrumLevels[i])) * 0.33, saturation: 1.0, brightness: 0.9))
                                 .cornerRadius(2)
-                                .frame(width: 10, height: CGFloat(audioManager.spectrumLevels[i]) * 100)
-                        }
+                                .frame(width: 10, height: CGFloat(audioManager.spectrumLevels[i]) * 100)                        }
                     }
 //                    Spacer()
                 }
