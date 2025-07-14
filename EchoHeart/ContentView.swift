@@ -23,8 +23,14 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 20) {
-                Text("🎧EchoHeart🎧")
+            VStack(spacing: 0) {
+                Image("AppLogo")  // ← 🎧の代わりにアイコン画像を表示
+                    .resizable()
+                    .frame(width: 76, height: 76)  // サイズはお好みで
+                    .clipShape(RoundedRectangle(cornerRadius: 12)) // オプション：角を丸めたいとき
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 2, y: 2)
+                Spacer().frame(height: 10)
+                Text("EchoHeart")
                 //                    .font(.largeTitle)
                     .font(.system(size: 32, weight: .semibold, design: .rounded))
                     .bold()
@@ -112,34 +118,37 @@ struct ContentView: View {
 //                .padding()
                 
                 VStack(spacing: 0) {
-                    Text("低音 (200Hz): \(Int(audioManager.lowGain)) dB")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-//                    Slider(value: $audioManager.lowGain, in: -24...24, step: 1)
-//                        .padding(.horizontal)
-//                        .frame(height: 100) // 高さ指定でタッチ領域アップ
-//                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
-                    FatSlider(value: $audioManager.lowGain, range: -24...24)
-                        .padding(.horizontal, 20)
-                    Spacer().frame(height: 20)
-//                    Text("Low Gain: \(Int(audioManager.lowGain)) dB")
-                    Text("中音 (1000Hz): \(Int(audioManager.midGain)) dB")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-//                    Slider(value: $audioManager.midGain, in: -24...24, step: 1)
-//                        .padding(.horizontal)
-//                        .frame(height: 40) // 高さ指定でタッチ領域アップ
-//                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
-                    FatSlider(value: $audioManager.midGain, range: -24...24)
-                        .padding(.horizontal, 20)
+                    VStack(alignment: .leading) {
+                        Text("低音 (200Hz): \(Int(audioManager.lowGain)) dB")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        //                    Slider(value: $audioManager.lowGain, in: -24...24, step: 1)
+                        //                        .padding(.horizontal)
+                        //                        .frame(height: 100) // 高さ指定でタッチ領域アップ
+                        //                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
+                        FatSlider(value: $audioManager.lowGain, range: -24...24)
+                    }.padding(.horizontal, 20)
                     Spacer().frame(height: 20)
 
-                    Text("高音 (4000Hz): \(Int(audioManager.highGain)) dB")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-//                    Slider(value: $audioManager.highGain, in: -24...24, step: 1)
-//                        .padding(.horizontal)
-//                        .frame(height: 40) // 高さ指定でタッチ領域アップ
-//                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
-                    FatSlider(value: $audioManager.highGain, range: -24...24)
-                        .padding(.horizontal, 20)
+                    VStack(alignment: .leading) {
+                        Text("中音 (1000Hz): \(Int(audioManager.midGain)) dB")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        //                    Slider(value: $audioManager.midGain, in: -24...24, step: 1)
+                        //                        .padding(.horizontal)
+                        //                        .frame(height: 40) // 高さ指定でタッチ領域アップ
+                        //                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
+                        FatSlider(value: $audioManager.midGain, range: -24...24)
+                    }.padding(.horizontal, 20)
+                    Spacer().frame(height: 20)
+
+                    VStack(alignment: .leading) {
+                        Text("高音 (4000Hz): \(Int(audioManager.highGain)) dB")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        //                    Slider(value: $audioManager.highGain, in: -24...24, step: 1)
+                        //                        .padding(.horizontal)
+                        //                        .frame(height: 40) // 高さ指定でタッチ領域アップ
+                        //                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
+                        FatSlider(value: $audioManager.highGain, range: -24...24)
+                    }.padding(.horizontal, 20)
                 }
                 .padding()
                 
