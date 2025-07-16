@@ -1,6 +1,7 @@
 import AVFoundation
 import Accelerate
 import Combine
+import NotificationCenter
 
 
 
@@ -22,19 +23,6 @@ class AudioManager: ObservableObject {
     @Published var currentLevel: Float = 0.0
     private var levelTimer: Timer?
     private var isMonitoring = false
-    
-    // 👇 ユーザーが調整する値
-    //    @Published var eqFrequency: Float {
-    //        didSet { UserDefaults.standard.set(eqFrequency, forKey: "eqFrequency") }
-    //    }
-    //
-    //    @Published var eqGain: Float {
-    //        didSet { UserDefaults.standard.set(eqGain, forKey: "eqGain") }
-    //    }
-    //
-    //    @Published var eqWidth: Float {
-    //        didSet { UserDefaults.standard.set(eqWidth, forKey: "eqWidth") }
-    //    }
     
     @Published var masterVolume: Float {
         didSet {
@@ -77,10 +65,6 @@ class AudioManager: ObservableObject {
             "masterVolume": 1.0
         ])
         
-        // 登録されていればそれが使われる
-        //        self.eqFrequency = UserDefaults.standard.float(forKey: "eqFrequency")
-        //        self.eqGain = UserDefaults.standard.float(forKey: "eqGain")
-        //        self.eqWidth = UserDefaults.standard.float(forKey: "eqWidth")
         self.lowGain = UserDefaults.standard.float(forKey: "lowGain")
         self.midGain = UserDefaults.standard.float(forKey: "midGain")
         self.highGain = UserDefaults.standard.float(forKey: "highGain")
@@ -88,21 +72,6 @@ class AudioManager: ObservableObject {
         
         setupEQ()
     }
-    
-    //    private func setupEQ() {
-    //        let band = eq.bands[0]
-    //        band.filterType = .parametric
-    //        band.filterType = .bandPass
-    //        band.bypass = false
-    //        updateEQ()
-    //    }
-    
-    //    private func updateEQ() {
-    //        let band = eq.bands[0]
-    //        band.gain = eqGain
-    //        band.frequency = eqFrequency
-    //        band.bandwidth = eqWidth
-    //    }
     
     private func setupEQ() {
         eqNode.globalGain = 0 // 全体ゲイン
@@ -133,9 +102,18 @@ class AudioManager: ObservableObject {
     }
     
     
+    func isHeadphonesConnected() -> Bool {
+        let route = AVAudioSession.sharedInstance().currentRoute
+        for output in route.outputs {
+            if output.portType == .headphones || output.portType == .bluetoothA2DP || output.portType == .bluetoothLE || output.portType == .bluetoothHFP {
+                return true
+            }
+        }
+        return false
+    }
     
-    func startMicrophone() {
-        if isRunning { return }
+    func startMicrophone() -> Bool {
+        if isRunning { return true }
         
         do {
             let session = AVAudioSession.sharedInstance()
@@ -143,14 +121,17 @@ class AudioManager: ObservableObject {
             try session.setActive(true)
         } catch {
             print("❌ AudioSession設定エラー: \(error)")
+            return false
         }
+        
+        if !isHeadphonesConnected() {
+            print("ヘッドホンを接続してください")
+            return false
+        }
+        
         
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
-        
-//        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-//            self.processAudioBuffer(buffer: buffer)
-//        }
         
         mainMixer.outputVolume = masterVolume
         
@@ -160,15 +141,16 @@ class AudioManager: ObservableObject {
         audioEngine.attach(eqNode)
         audioEngine.connect(inputNode, to: eqNode, format: format)
         audioEngine.connect(eqNode, to: mainMixer, format: format)
-        //        audioEngine.connect(mixer, to: output, format: format)
         audioEngine.connect(mainMixer, to: output, format: format)
         
         do {
             try audioEngine.start()
             isRunning = true
             print("🎙️ マイク＆音量監視開始")
+            return true
         } catch {
             print("❌ AudioEngine起動エラー: \(error)")
+            return false
         }
     }
     
@@ -238,9 +220,6 @@ class AudioManager: ObservableObject {
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
         audioEngine.reset()
-//        for i in 1..<self.barCount {
-//            self.spectrumLevels[i] = 0
-//        }
         currentLevel = 0.0
         isRunning = false
         print("🛑 マイク停止")

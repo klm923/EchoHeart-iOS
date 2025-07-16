@@ -9,6 +9,28 @@ func playClickSound(id: UInt32) {
 struct ContentView: View {
     @StateObject private var audioManager = AudioManager()
     @State private var isMicOn = false
+    @State private var showNoHeadphonesAlert = false
+
+    func handleAudioRouteChange(_ notification: Notification) {
+        let session = AVAudioSession.sharedInstance()
+        let route = session.currentRoute
+        let hasHeadphones = route.outputs.contains { output in
+            output.portType == .headphones ||
+            output.portType == .bluetoothA2DP ||
+            output.portType == .bluetoothHFP ||
+            output.portType == .bluetoothLE
+        }
+        
+        // 録音中にヘッドホンの接続が切れたら、録音を停止する
+        if !hasHeadphones && isMicOn {
+            audioManager.stopMicrophone()
+            showNoHeadphonesAlert = true
+            isMicOn = false
+        }
+        
+        print("🔁 オーディオルート変更！ヘッドホン接続状態: \(hasHeadphones)")
+        // → UI更新が必要なら @State を使って反映
+    }
 
     var body: some View {
         ZStack {
@@ -35,36 +57,12 @@ struct ContentView: View {
                     .font(.system(size: 32, weight: .semibold, design: .rounded))
                     .bold()
                 
-                
-                // 🎚 レベルメーター表示
-//                VStack(){
-//                    HStack(alignment: .bottom, spacing: 6) {
-//                        //                    Spacer()
-//                        ForEach(0..<audioManager.spectrumLevels.count, id: \.self) { i in
-//                            VStack{
-//                                Spacer()
-//                                Rectangle()
-//                                    .fill(Color(hue: (1.0 - Double(audioManager.spectrumLevels[i])) * 0.33, saturation: 1.0, brightness: 0.9).gradient)
-//                                    .cornerRadius(2)
-//                                .frame(width: 10, height: CGFloat(audioManager.spectrumLevels[i]) * 100)                        }
-//                        }
-//                        //                    Spacer()
-//                    }
-//                    .frame(height: 110)
-//                    //                Text("スペクトラム表示")
-//                }
-                
+                                
                 VStack() {
 //                    Spacer()
                     
                     // 🟣 ぽよんぽよんするピンクの◯
-//                    Circle()
-//                        .fill(Color.pink.opacity(0.8))
-//                        .frame(width: 0 + CGFloat(audioManager.currentLevel * 200),
-//                               height: 0 + CGFloat(audioManager.currentLevel * 200))
-//                        .animation(.easeOut(duration: 0.1), value: audioManager.currentLevel)
                     Circle()
-//                        .fill(Color.pink.gradient.opacity(0.8))
                         .fill(
                             RadialGradient(
                                 gradient: Gradient(colors: [.pink.opacity(0.8), .pink.opacity(0.0)]),
@@ -85,46 +83,11 @@ struct ContentView: View {
                 }.frame(height: 200)
 //                Spacer()
                 
-//                VStack(spacing: 16) {
-//                    VStack(alignment: .leading) {
-//                        Text("中心周波数: \(Int(audioManager.eqFrequency)) Hz")
-//                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-//                        Slider(value: $audioManager.eqFrequency, in: 1000...4000, step: 50)
-//                            .tint(Color.echoGreen)
-//                            .shadow(color: .black.opacity(0.1), radius: 4, x: 2, y: 2)
-//                    }
-//                    .padding(.horizontal, 20)
-//                    
-//                    VStack(alignment: .leading) {
-//                        Text("ゲイン: \(String(format: "%.1f", audioManager.eqGain)) dB")
-//                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-//                        Slider(value: $audioManager.eqGain, in: -20...60, step: 1.0)
-//                            .tint(Color.echoGreen)
-//                            .shadow(color: .black.opacity(0.1), radius: 4, x: 2, y: 2)
-//                    }
-//                    .padding(.horizontal, 20)
-//                    
-//                    VStack(alignment: .leading) {
-//                        Text("範囲: \(String(format: "%.1f", audioManager.eqWidth)) オクターブ")
-//                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-//                        Slider(value: $audioManager.eqWidth, in: 0.5...3.0, step: 0.1)
-//                            .tint(Color.echoGreen)
-//                            .shadow(color: .black.opacity(0.1), radius: 4, x: 2, y: 2)
-//                    }
-//                    .padding(.horizontal, 20)
-//                    
-//                    Spacer()
-//                }
-//                .padding()
                 
                 VStack(spacing: 0) {
                     VStack(alignment: .leading) {
                         Text("低音 (200Hz): \(Int(audioManager.lowGain)) dB")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        //                    Slider(value: $audioManager.lowGain, in: -24...24, step: 1)
-                        //                        .padding(.horizontal)
-                        //                        .frame(height: 100) // 高さ指定でタッチ領域アップ
-                        //                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
                         FatSlider(value: $audioManager.lowGain, range: -24...24)
                     }.padding(.horizontal, 20)
                     Spacer().frame(height: 20)
@@ -132,10 +95,6 @@ struct ContentView: View {
                     VStack(alignment: .leading) {
                         Text("中音 (1000Hz): \(Int(audioManager.midGain)) dB")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        //                    Slider(value: $audioManager.midGain, in: -24...24, step: 1)
-                        //                        .padding(.horizontal)
-                        //                        .frame(height: 40) // 高さ指定でタッチ領域アップ
-                        //                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
                         FatSlider(value: $audioManager.midGain, range: -24...24)
                     }.padding(.horizontal, 20)
                     Spacer().frame(height: 20)
@@ -143,10 +102,6 @@ struct ContentView: View {
                     VStack(alignment: .leading) {
                         Text("高音 (4000Hz): \(Int(audioManager.highGain)) dB")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        //                    Slider(value: $audioManager.highGain, in: -24...24, step: 1)
-                        //                        .padding(.horizontal)
-                        //                        .frame(height: 40) // 高さ指定でタッチ領域アップ
-                        //                        .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
                         FatSlider(value: $audioManager.highGain, range: -24...24)
                     }.padding(.horizontal, 20)
                 }
@@ -156,9 +111,6 @@ struct ContentView: View {
                     VStack(alignment: .leading) {
                         Text("🔊 全体音量: \(Int(audioManager.masterVolume * 10)) %")
                             .font(.system(size: 16, weight: .semibold, design: .rounded))
-//                        Slider(value: $audioManager.masterVolume, in: 0...10.0, step: 0.1)
-//                            .tint(Color.echoGreen)
-//                            .shadow(color: .black.opacity(0.1), radius: 4, x: 2, y: 2)
                         FatSlider(value: $audioManager.masterVolume, range: 0...10.0)
                         
                     }
@@ -169,41 +121,51 @@ struct ContentView: View {
                 
                 Button(action: {
                     if isMicOn {
-                        playClickSound(id: 1118) // 動画の録画停止音
                         audioManager.stopMicrophone()
+                        playClickSound(id: 1118) // 動画の録画停止音
+                        isMicOn.toggle()
                     } else {
-                        playClickSound(id: 1117) // 動画の録画開始音
-                        audioManager.startMicrophone()
+                        if audioManager.startMicrophone() {
+                            playClickSound(id: 1117) // 動画の録画開始音
+                            isMicOn.toggle()
+                        } else {
+                            showNoHeadphonesAlert = true
+                        }
                     }
-                    isMicOn.toggle()
+                    
                 }) {
                     Label(isMicOn ? "マイク オフ" : "マイク オン", systemImage: isMicOn ? "mic.slash.fill" : "mic.fill")
                         .font(.title)
                         .padding()
-//                        .background(isMicOn ? Color.pink : Color.blue)
-//                        .foregroundColor(.white)
-//                        .cornerRadius(10)
                         .labelStyle(.iconOnly)
-//                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(isMicOn ? .echoPink : .echoBlue)
                 .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
                 .padding()
-                
+                .alert("⚠️ ヘッドホン未接続", isPresented: $showNoHeadphonesAlert) {
+                } message: {
+                    Text("録音するにはヘッドホンを接続してください")
+                }
             }
-            //        .background(
-            //            LinearGradient(gradient: Gradient(colors: [Color.white, Color.echoPink.opacity(0.2)]),
-            //                           startPoint: .top,
-            //                           endPoint: .bottom)
-            //        )
         }
         .onAppear {
 //                    audioManager.startAudio() // あれば
             audioManager.startMonitoringLevel()
+            NotificationCenter.default.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: nil,
+                queue: .main
+            ) { notification in
+                handleAudioRouteChange(notification)
+            }
+
         }
         .onDisappear {
             audioManager.stopMonitoringLevel()
+            NotificationCenter.default.removeObserver(self,
+                name: AVAudioSession.routeChangeNotification,
+                object: nil)
         }
 
     }
