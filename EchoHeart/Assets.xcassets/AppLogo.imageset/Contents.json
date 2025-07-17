@@ -1,12 +1,11 @@
 {
   "images" : [
     {
-      "filename" : "Icon-App-76x76@1x.png",
+      "filename" : "EchoHeart_Icon_128x128_transparent.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "Icon-App-76x76@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
