@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import AudioToolbox
+import MediaPlayer
 
 func playClickSound(id: UInt32) {
     AudioServicesPlaySystemSound(id)
@@ -10,6 +11,8 @@ struct ContentView: View {
     @StateObject private var audioManager = AudioManager()
     @State private var isMicOn = false
     @State private var showNoHeadphonesAlert = false
+    @State private var systemVolume: Float = AVAudioSession.sharedInstance().outputVolume
+    private let volumeCheckTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     
     func handleAudioRouteChange(_ notification: Notification) {
         let session = AVAudioSession.sharedInstance()
@@ -71,14 +74,27 @@ struct ContentView: View {
                                 .animation(.spring(response: 0.2, dampingFraction: 0.6), value: audioManager.currentLevel)
                         }.frame(height: pinkCircleHeight)
 
-                        Image("AppLogo")  // ← 🎧の代わりにアイコン画像を表示
-                            .resizable()
-                            .frame(width: 128, height: 128)  // サイズはお好みで
-    //                        .clipShape(RoundedRectangle(cornerRadius: 12)) // オプション：角を丸めたいとき
-                            .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
-                            .blur(radius: 1) // 👈 半径2ポイント分ぼかし
-    //                        .blur(radius: audioManager.currentLevel > 0.1 ? 1 : 0)
-    //                        .animation(.easeInOut(duration: 0.2), value: audioManager.currentLevel)
+                        ZStack() {
+                            Image("AppLogo")  // ← 🎧の代わりにアイコン画像を表示
+                                .resizable()
+                                .frame(width: 128, height: 128)  // サイズはお好みで
+                            //                        .clipShape(RoundedRectangle(cornerRadius: 12)) // オプション：角を丸めたいとき
+                                .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
+                                .blur(radius: 1) // 👈 半径2ポイント分ぼかし
+                            //                        .blur(radius: audioManager.currentLevel > 0.1 ? 1 : 0)
+                            //                        .animation(.easeInOut(duration: 0.2), value: audioManager.currentLevel)
+                            VStack() {
+                                Spacer().frame(height: 128)
+                                HStack {
+                                    Image(systemName: "speaker.wave.3.fill")
+                                    Text("\(Int(systemVolume * 100))%")
+                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                 }
+                                .foregroundColor(.secondary)
+                            }
+//                            .font(.subheadline)
+//                            Spacer()
+                        }
 
                         
                     }
@@ -113,12 +129,15 @@ struct ContentView: View {
                         }.padding(.horizontal, 20)
                     }
                     .padding()
-                    Spacer()
+                    Spacer(minLength: 0)
                     
                     VStack() {
                         VStack(alignment: .leading, spacing: 0) {
-                            Text("🔊 全体音量: \(Int(audioManager.masterVolume * 10)) %")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            HStack(spacing: 0) {
+                                Image(systemName: "waveform")
+                                Text("増幅率: \(Int(audioManager.masterVolume * 10)) %")
+                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            }
                             FatSlider(value: $audioManager.masterVolume, range: 0...10.0)
                             
                         }
@@ -135,12 +154,25 @@ struct ContentView: View {
                             playClickSound(id: 1118) // 動画の録画停止音
                             isMicOn.toggle()
                         } else {
-                            if audioManager.startMicrophone() {
-                                playClickSound(id: 1117) // 動画の録画開始音
-                                isMicOn.toggle()
-                            } else {
-                                showNoHeadphonesAlert = true
+                            audioManager.startMicrophone { success in
+                                if success {
+                                    // マイクが正常に開始された → UI更新
+                                    playClickSound(id: 1117) // 動画の録画開始音
+                                    self.isMicOn = true
+                                } else {
+                                    // エラー時のUI通知や処理
+                                    self.isMicOn = false
+                                    showNoHeadphonesAlert = true
+                                    print("⚠️ マイク起動に失敗しました")
+                                }
                             }
+                            
+//                            if audioManager.startMicrophone() {
+//                                playClickSound(id: 1117) // 動画の録画開始音
+//                                isMicOn.toggle()
+//                            } else {
+//                                showNoHeadphonesAlert = true
+//                            }
                         }
                         
                     }) {
@@ -160,9 +192,9 @@ struct ContentView: View {
                     }
                     Spacer()
                 }
-                .onAppear {
-                    print("geometry.size.height: \(geometry.size.height)")
-                }
+//                .onAppear {
+//                    print("geometry.size.height: \(geometry.size.height)")
+//                }
             }
         }
         .onAppear {
@@ -183,6 +215,12 @@ struct ContentView: View {
                 name: AVAudioSession.routeChangeNotification,
                 object: nil)
         }
-
+        .onReceive(volumeCheckTimer) { _ in
+            let current = AVAudioSession.sharedInstance().outputVolume
+            if abs(current - systemVolume) > 0.01 {
+                systemVolume = current
+                print("音量変更検知: \(current)")
+            }
+        }
     }
 }

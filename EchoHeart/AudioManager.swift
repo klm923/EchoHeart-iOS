@@ -12,6 +12,7 @@ class AudioManager: ObservableObject {
     // 修正後（バンド数を3つ指定する）
     private var eqNode = AVAudioUnitEQ(numberOfBands: 3)
     private var isRunning = false
+//    private var isStarting = true
     private var cancellables = Set<AnyCancellable>()
     private let barCount = 15
     private var inputFormat: AVAudioFormat?
@@ -112,48 +113,62 @@ class AudioManager: ObservableObject {
         return false
     }
     
-    func startMicrophone() -> Bool {
-        if isRunning { return true }
-        
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP])
-            try session.setActive(true)
-        } catch {
-            print("❌ AudioSession設定エラー: \(error)")
-            return false
+    func startMicrophone(completion: @escaping (Bool) -> Void) {
+        if isRunning {
+            completion(true)
+            return
         }
-        
-        if !isHeadphonesConnected() {
-            print("ヘッドホンを接続してください")
-            return false
-        }
-        
-        
-        let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        
-        mainMixer.outputVolume = masterVolume
-        
-        let output = audioEngine.outputNode
-        
-        setupEQ()
-        audioEngine.attach(eqNode)
-        audioEngine.connect(inputNode, to: eqNode, format: format)
-        audioEngine.connect(eqNode, to: mainMixer, format: format)
-        audioEngine.connect(mainMixer, to: output, format: format)
-        
-        do {
-            try audioEngine.start()
-            isRunning = true
-            print("🎙️ マイク＆音量監視開始")
-            return true
-        } catch {
-            print("❌ AudioEngine起動エラー: \(error)")
-            return false
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP])
+                try session.setActive(true)
+            } catch {
+                print("❌ AudioSession設定エラー: \(error)")
+                DispatchQueue.main.async {
+                    completion(false)
+                }
+                return
+            }
+
+            if !self.isHeadphonesConnected() {
+                print("ヘッドホンを接続してください")
+                DispatchQueue.main.async {
+                    completion(false)
+                }
+                return
+            }
+
+            let inputNode = self.audioEngine.inputNode
+            let format = inputNode.outputFormat(forBus: 0)
+            let output = self.audioEngine.outputNode
+
+            self.mainMixer.outputVolume = self.masterVolume
+            self.setupEQ()
+            self.audioEngine.attach(self.eqNode)
+            self.audioEngine.connect(inputNode, to: self.eqNode, format: format)
+            self.audioEngine.connect(self.eqNode, to: self.mainMixer, format: format)
+            self.audioEngine.connect(self.mainMixer, to: output, format: format)
+
+//            self.audioEngine.prepare() // ←これはなくても良いみたい
+            Thread.sleep(forTimeInterval: 0.1) // ←これを入れないと初回録音スタート（audioEngine.start()）で空振りする
+
+            do {
+                try self.audioEngine.start()
+                DispatchQueue.main.async {
+                    self.isRunning = true
+                    print("🎙️ マイク＆音量監視開始")
+                    completion(true)
+                }
+            } catch {
+                print("❌ AudioEngine起動エラー: \(error)")
+                DispatchQueue.main.async {
+                    completion(false)
+                }
+            }
         }
     }
-    
     
     func processAudioBuffer(buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData?[0] else { return }

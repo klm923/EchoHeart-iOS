@@ -14,6 +14,10 @@
 - Swift / SwiftUI
 - AVAudioEngine / AVAudioUnitEQ / AVAudioMixerNode
 
+## 解決すべき課題
+- 初回のマイクオン時に、audioEnginがstarttしない
+- （とりあえず、Thread.sleep(forTimeInterval: 0.1)でしのいでいる）
+
 ## 🧩 今後の展望
 - ノイズ抑制の導入
 - Voice Activity Detection（VAD）による声抽出
