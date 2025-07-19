@@ -14,6 +14,17 @@ extension Color {
 }
 
 
+//enum listenMode {
+//    case ambient
+//    case conversation
+//}
+enum listenMode: String, CaseIterable, Identifiable { // ここで String を指定するよ
+    case ambient      = "ambient"      // Raw Value として文字列を定義
+    case conversation = "conversation" // Raw Value として文字列を定義
+    
+    var id: Self { self }
+}
+
 struct FatSlider: View {
     @Binding var value: Float
     var range: ClosedRange<Float>
@@ -23,16 +34,16 @@ struct FatSlider: View {
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(Color.gray.opacity(0.3))
-                    .frame(height: 12) // トラック太さ
+                    .frame(height: 10) // トラック太さ
 
                 Capsule()
                     .fill(Color.pink).opacity(0.8)
-                    .frame(width: CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound)) * geo.size.width, height: 12)
+                    .frame(width: CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound)) * geo.size.width, height: 10)
 
                 Circle()
                     .fill(Color.white)
-                    .frame(width: 30, height: 30) // つまみの大きさ
-                    .offset(x: CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound)) * geo.size.width - 15)
+                    .frame(width: 24, height: 24) // つまみの大きさ
+                    .offset(x: CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound)) * geo.size.width - 12)
                     .shadow(radius: 2)
                     .gesture(
                         DragGesture()
@@ -43,7 +54,7 @@ struct FatSlider: View {
                     )
             }
         }
-        .frame(height: 30)
+        .frame(height: 24)
 //        .padding(.horizontal)
     }
 }

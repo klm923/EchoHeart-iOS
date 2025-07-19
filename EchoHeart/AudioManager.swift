@@ -50,6 +50,45 @@ class AudioManager: ObservableObject {
             UserDefaults.standard.set(highGain, forKey: "highGain")
         }
     }
+    @Published var selectedListenMode: listenMode = .ambient { // 変数名をlistenModeからselectedListenModeに変えてみたよ、区別しやすくなるからね
+        didSet {
+            // モードを切り替える
+            setupAudioSessionForAppLaunch(newListenMode: selectedListenMode)
+            if isRunning { // 録音中なら…
+                // オーディオエンジンを一度停止・リセットして、再起動する処理もここに入れるといいかも
+                self.audioEngine.stop()
+                self.audioEngine.reset()
+                isRunning = false
+                self.startMicrophone { success in
+                    if success {
+                        self.isRunning = true
+                    } else {
+                        self.stopMicrophone()
+                    }
+                }
+            }
+            // listenModeのRaw Value（文字列）を保存する
+            UserDefaults.standard.set(selectedListenMode.rawValue, forKey: "listenMode")
+        }
+    }
+    func setupAudioSessionForAppLaunch(newListenMode: listenMode) {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            switch newListenMode {
+            case .ambient:
+                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP, ])
+                print("✅ 環境音モードに切り替えました")
+            case .conversation:
+                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, ])
+                print("✅ 会話モードに切り替えました")
+            }
+                //.defaultToSpeakerは、ヘッドホンが接続されてないときにiPhoneのスピーカーを使うオプション
+            try session.setActive(true, options: .notifyOthersOnDeactivation) // ここで非同期で完了を待つオプションも検討
+            print("✅ アプリ起動時AudioSession設定完了")
+        } catch {
+            print("❌ アプリ起動時AudioSession設定エラー: \(error)")
+        }
+    }
     
     init() {
         self.spectrumLevels = Array(repeating: 0.0, count: barCount)
@@ -63,14 +102,25 @@ class AudioManager: ObservableObject {
             "lowGain": 0.0,
             "midGain": 0.0,
             "highGain": 0.0,
-            "masterVolume": 1.0
+            "masterVolume": 1.0,
+            "listenMode": "ambient"
         ])
         
         self.lowGain = UserDefaults.standard.float(forKey: "lowGain")
         self.midGain = UserDefaults.standard.float(forKey: "midGain")
         self.highGain = UserDefaults.standard.float(forKey: "highGain")
         self.masterVolume = UserDefaults.standard.float(forKey: "masterVolume")
+        if let savedModeString = UserDefaults.standard.string(forKey: "listenMode") {
+            // 読み出した文字列から listenMode を初期化する
+            // Raw Valueからenumを初期化するfailable initializerを使う
+            self.selectedListenMode = listenMode(rawValue: savedModeString)  ?? .ambient //でデフォルト値を指定
+        } else {
+            // 保存されたデータがない場合はデフォルト値を使う
+            self.selectedListenMode = .ambient
+        }
+
         
+        setupAudioSessionForAppLaunch(newListenMode: self.selectedListenMode)
         setupEQ()
     }
     
@@ -119,18 +169,9 @@ class AudioManager: ObservableObject {
             return
         }
 
+//        setupAudioSessionForAppLaunch()
+        
         DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let session = AVAudioSession.sharedInstance()
-                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP])
-                try session.setActive(true)
-            } catch {
-                print("❌ AudioSession設定エラー: \(error)")
-                DispatchQueue.main.async {
-                    completion(false)
-                }
-                return
-            }
 
             if !self.isHeadphonesConnected() {
                 print("ヘッドホンを接続してください")
@@ -151,8 +192,8 @@ class AudioManager: ObservableObject {
             self.audioEngine.connect(self.eqNode, to: self.mainMixer, format: format)
             self.audioEngine.connect(self.mainMixer, to: output, format: format)
 
-//            self.audioEngine.prepare() // ←これはなくても良いみたい
-            Thread.sleep(forTimeInterval: 0.1) // ←これを入れないと初回録音スタート（audioEngine.start()）で空振りする
+            self.audioEngine.prepare()
+//            Thread.sleep(forTimeInterval: 0.1) // ←これを入れないと初回録音スタート（audioEngine.start()）で空振りする
 
             do {
                 try self.audioEngine.start()
@@ -170,65 +211,65 @@ class AudioManager: ObservableObject {
         }
     }
     
-    func processAudioBuffer(buffer: AVAudioPCMBuffer) {
-        guard let channelData = buffer.floatChannelData?[0] else { return }
-        let frameCount = Int(buffer.frameLength)
-        var window = [Float](repeating: 0, count: frameCount)
-        var spectrum = [Float](repeating: 0.0, count: barCount)
-        
-        // Hannウィンドウで滑らかに
-        vDSP_hann_window(&window, vDSP_Length(frameCount), Int32(vDSP_HANN_NORM))
-        var samples = [Float](repeating: 0.0, count: frameCount)
-        vDSP_vmul(channelData, 1, window, 1, &samples, 1, vDSP_Length(frameCount))
-        
-        // FFT用に複素数へ変換
-        let log2n = UInt(round(log2(Float(frameCount))))
-        let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2))!
-        var realp = [Float](repeating: 0.0, count: frameCount / 2)
-        var imagp = [Float](repeating: 0.0, count: frameCount / 2)
-        
-        realp.withUnsafeMutableBufferPointer { realPointer in
-            imagp.withUnsafeMutableBufferPointer { imagPointer in
-                var splitComplex = DSPSplitComplex(realp: realPointer.baseAddress!, imagp: imagPointer.baseAddress!)
-                
-                samples.withUnsafeMutableBufferPointer { ptr in
-                    ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: frameCount) { complexPtr in
-                        vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(frameCount / 2))
-                    }
-                }
-                
-                // FFT実行
-                vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
-                
-                // パワースペクトラムに変換
-                var magnitudes = [Float](repeating: 0.0, count: frameCount / 2)
-                vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(frameCount / 2))
-                
-                // ここでspectrum計算（バンド分け）
-                let bandSize = magnitudes.count / barCount
-                for i in 0..<barCount {
-                    let start = i * bandSize
-                    let end = start + bandSize
-                    let slice = magnitudes[start..<min(end, magnitudes.count)]
-                    let avg = sqrt(slice.reduce(0, +) / Float(slice.count))
-                    spectrum[i] = min(max(avg * 3, 0), 1)
-                    //                    print("Band \(i): avg = \(avg), scaled = \(avg * 3)")
-                }
-                
-                DispatchQueue.main.async {
-                    for i in 1..<self.barCount {
-                        // 旧値に対して重みを加えて更新（α=0.2くらい）
-                        let current = self.spectrumLevels[i]
-                        self.spectrumLevels[i] = current * 0.8 + spectrum[i] * 0.2
-                    }
-                }
-            }
-        }
-        
-        
-        vDSP_destroy_fftsetup(fftSetup)
-        
-    }
+//    func processAudioBuffer(buffer: AVAudioPCMBuffer) {
+//        guard let channelData = buffer.floatChannelData?[0] else { return }
+//        let frameCount = Int(buffer.frameLength)
+//        var window = [Float](repeating: 0, count: frameCount)
+//        var spectrum = [Float](repeating: 0.0, count: barCount)
+//        
+//        // Hannウィンドウで滑らかに
+//        vDSP_hann_window(&window, vDSP_Length(frameCount), Int32(vDSP_HANN_NORM))
+//        var samples = [Float](repeating: 0.0, count: frameCount)
+//        vDSP_vmul(channelData, 1, window, 1, &samples, 1, vDSP_Length(frameCount))
+//        
+//        // FFT用に複素数へ変換
+//        let log2n = UInt(round(log2(Float(frameCount))))
+//        let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2))!
+//        var realp = [Float](repeating: 0.0, count: frameCount / 2)
+//        var imagp = [Float](repeating: 0.0, count: frameCount / 2)
+//        
+//        realp.withUnsafeMutableBufferPointer { realPointer in
+//            imagp.withUnsafeMutableBufferPointer { imagPointer in
+//                var splitComplex = DSPSplitComplex(realp: realPointer.baseAddress!, imagp: imagPointer.baseAddress!)
+//                
+//                samples.withUnsafeMutableBufferPointer { ptr in
+//                    ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: frameCount) { complexPtr in
+//                        vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(frameCount / 2))
+//                    }
+//                }
+//                
+//                // FFT実行
+//                vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
+//                
+//                // パワースペクトラムに変換
+//                var magnitudes = [Float](repeating: 0.0, count: frameCount / 2)
+//                vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(frameCount / 2))
+//                
+//                // ここでspectrum計算（バンド分け）
+//                let bandSize = magnitudes.count / barCount
+//                for i in 0..<barCount {
+//                    let start = i * bandSize
+//                    let end = start + bandSize
+//                    let slice = magnitudes[start..<min(end, magnitudes.count)]
+//                    let avg = sqrt(slice.reduce(0, +) / Float(slice.count))
+//                    spectrum[i] = min(max(avg * 3, 0), 1)
+//                    //                    print("Band \(i): avg = \(avg), scaled = \(avg * 3)")
+//                }
+//                
+//                DispatchQueue.main.async {
+//                    for i in 1..<self.barCount {
+//                        // 旧値に対して重みを加えて更新（α=0.2くらい）
+//                        let current = self.spectrumLevels[i]
+//                        self.spectrumLevels[i] = current * 0.8 + spectrum[i] * 0.2
+//                    }
+//                }
+//            }
+//        }
+//        
+//        
+//        vDSP_destroy_fftsetup(fftSetup)
+//        
+//    }
     
     func stopMicrophone() {
         if !isRunning { return }
