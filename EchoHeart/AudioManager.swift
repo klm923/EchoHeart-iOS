@@ -24,6 +24,8 @@ class AudioManager: ObservableObject {
     @Published var currentLevel: Float = 0.0
     private var levelTimer: Timer?
     private var isMonitoring = false
+    private var _currentRawLevel: Float = 0.0 // ここに生のレベルを一時保存
+    private var levelUpdateTimer: Timer? // タイマーを保持するプロパティ
     
     @Published var masterVolume: Float {
         didSet {
@@ -282,32 +284,45 @@ class AudioManager: ObservableObject {
     }
     
     func startMonitoringLevel() {
-        // すでにtapが存在している場合は何もしない（2重tap防止）
         if isMonitoring { return }
-
         isMonitoring = true
 
         audioEngine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
             guard let channelData = buffer.floatChannelData?[0] else { return }
             let channelDataValue = stride(from: 0,
-                                          to: Int(buffer.frameLength),
-                                          by: buffer.stride).map { channelData[$0] }
+                                            to: Int(buffer.frameLength),
+                                            by: buffer.stride).map { channelData[$0] }
 
             let rms = sqrt(channelDataValue.map { $0 * $0 }.reduce(0, +) / Float(buffer.frameLength))
             let avgPower = 20 * log10(rms)
 
             let meterLevel = self.normalizedPowerLevel(from: avgPower)
+            
+            // UI更新はせずに、生のレベルだけを一時保存
+            self._currentRawLevel = meterLevel
+        }
+        
+        // タイマーを開始して、UIを定期的に更新する
+        // 例: 1秒間に30回（1.0 / 30.0 = 約0.033秒ごと）更新
+        levelUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            // メインスレッドでUIを更新
             DispatchQueue.main.async {
-                self.currentLevel = meterLevel
+                if self.isRunning {
+                    self.currentLevel = self._currentRawLevel
+                }
             }
         }
     }
-
+    
     func stopMonitoringLevel() {
         if isMonitoring {
             audioEngine.mainMixerNode.removeTap(onBus: 0)
             currentLevel = 0.0
             isMonitoring = false
+            // タイマーを停止するのも忘れずに！
+            levelUpdateTimer?.invalidate()
+            levelUpdateTimer = nil
         }
     }
 

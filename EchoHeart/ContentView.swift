@@ -72,7 +72,7 @@ struct ContentView: View {
                                 )
                                 .blur(radius: CGFloat(audioManager.currentLevel * 0.05))
                                 .frame(width: 1, height: 1)
-                                .scaleEffect(0 + CGFloat(audioManager.currentLevel) * pinkCircleHeight)
+                                .scaleEffect(CGFloat(audioManager.currentLevel) * pinkCircleHeight)
                                 .animation(.spring(response: 0.2, dampingFraction: 0.6), value: audioManager.currentLevel)
                         }.frame(height: pinkCircleHeight)
 
