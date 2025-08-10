@@ -7,6 +7,8 @@ func playClickSound(id: UInt32) {
     AudioServicesPlaySystemSound(id)
 }
 
+
+
 struct ContentView: View {
     @StateObject private var audioManager = AudioManager()
     @State private var isMicOn = false
@@ -15,7 +17,44 @@ struct ContentView: View {
     private let volumeCheckTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     @State private var hasHeadphones = false
 //    @State private var selectedMode: listenMode = .ambient
-    
+//    @State private var isUpsideDown: Bool = true {
+//        didSet {
+//            // isUpsideDown の値が変わったら向きを更新
+//            updateOrientation()
+//        }
+//    }
+//    
+//    private func updateOrientation() {
+//        let newOrientationMask: UIInterfaceOrientationMask // AppOrientationManagerに渡す用
+//        let preferredInterfaceOrientation: UIInterfaceOrientation // UIDevice.current.setValueに渡す用
+//
+//        if isUpsideDown {
+//            newOrientationMask = .portraitUpsideDown
+//            preferredInterfaceOrientation = .portraitUpsideDown // ここを .portraitUpsideDown にするよ！
+//        } else {
+//            newOrientationMask = .portrait
+//            preferredInterfaceOrientation = .portrait
+//        }
+//
+//        // 1. AppOrientationManager の許可する向きを更新
+//        AppOrientationManager.orientationLock = newOrientationMask
+//
+//        // 2. UIWindowScene を使って向きをリクエスト（iOS 16.0以降で推奨）
+//        // これが新しいiOSで重要！
+//        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+//            if #available(iOS 16.0, *) {
+//                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: newOrientationMask))
+//            } else {
+//                // Fallback on earlier versions
+//            }
+//        }
+//
+//        // 3. 古いAPIも使って強制的に向きをトリガー（iOS 15以前のフォールバック & iOS 16+でも強力なヒントとして）
+//        // これが、トグルで戻らない問題や、iOS 18でportraitUpsideDownが動かない問題の解決に役立つ可能性があるよ
+//        UIDevice.current.setValue(preferredInterfaceOrientation.rawValue, forKey: "orientation")
+//        UIViewController.attemptRotationToDeviceOrientation()
+//    }
+
     func handleAudioRouteChange(_ notification: Notification) {
         let session = AVAudioSession.sharedInstance()
         let route = session.currentRoute
@@ -207,6 +246,7 @@ struct ContentView: View {
                         }
                         
                     }
+                    
                     Spacer()
                 }
 //                .onAppear {
@@ -215,6 +255,10 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            // Viewが表示されたときに初期状態の向きを設定
+            // ユーザーが前回どちらを選んだか UserDefaults で読み出して設定してもいいかもね
+//            updateOrientation()
+            
             audioManager.startMonitoringLevel()
             NotificationCenter.default.addObserver(
                 forName: AVAudioSession.routeChangeNotification,
@@ -230,6 +274,17 @@ struct ContentView: View {
             NotificationCenter.default.removeObserver(self,
                 name: AVAudioSession.routeChangeNotification,
                 object: nil)
+            // Viewが非表示になったら、向きの制限を解除する（念のため）
+//            AppOrientationManager.orientationLock = .all
+//            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+//                if #available(iOS 16.0, *) {
+//                    windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .all))
+//                } else {
+//                    // Fallback on earlier versions
+//                }
+//            }
+//            UIDevice.current.setValue(UIInterfaceOrientation.unknown.rawValue, forKey: "orientation")
+//            UIViewController.attemptRotationToDeviceOrientation()
         }
         .onReceive(volumeCheckTimer) { _ in
             let current = AVAudioSession.sharedInstance().outputVolume

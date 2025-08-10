@@ -2,9 +2,7 @@ import AVFoundation
 import Accelerate
 import Combine
 import NotificationCenter
-
-
-
+//import MediaPlayer
 
 class AudioManager: ObservableObject {
     private var audioEngine = AVAudioEngine()
@@ -57,7 +55,7 @@ class AudioManager: ObservableObject {
             // モードを切り替える
             setupAudioSessionForAppLaunch(newListenMode: selectedListenMode)
             if isRunning { // 録音中なら…
-                // オーディオエンジンを一度停止・リセットして、再起動する処理もここに入れるといいかも
+                // オーディオエンジンを一度停止・リセットして、再起動する
                 self.audioEngine.stop()
                 self.audioEngine.reset()
                 isRunning = false
@@ -73,19 +71,56 @@ class AudioManager: ObservableObject {
             UserDefaults.standard.set(selectedListenMode.rawValue, forKey: "listenMode")
         }
     }
+    
+//    private func setupRemoteCommandCenter() {
+//        let commandCenter = MPRemoteCommandCenter.shared()
+//        
+//        commandCenter.playCommand.isEnabled = true
+//        commandCenter.playCommand.addTarget { [weak self] _ in
+//            guard let self = self else { return .commandFailed }
+//            if !self.isRunning {
+//                self.startMicrophone { success in } // 起動成功の確認は省略
+//            }
+//            return .success
+//        }
+//        
+//        commandCenter.pauseCommand.isEnabled = true
+//        commandCenter.pauseCommand.addTarget { [weak self] _ in
+//            guard let self = self else { return .commandFailed }
+//            if self.isRunning {
+//                self.stopMicrophone()
+//            }
+//            return .success
+//        }
+//        
+//        // その他必要なコマンドも追加
+//        commandCenter.togglePlayPauseCommand.isEnabled = true
+//        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
+//            guard let self = self else { return .commandFailed }
+//            if self.isRunning {
+//                self.stopMicrophone()
+//            } else {
+//                self.startMicrophone { success in }
+//            }
+//            return .success
+//        }
+//    }
+    
     func setupAudioSessionForAppLaunch(newListenMode: listenMode) {
         do {
             let session = AVAudioSession.sharedInstance()
             switch newListenMode {
             case .ambient:
-                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP, ])
+                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP, .mixWithOthers, .defaultToSpeaker])
                 print("✅ 環境音モードに切り替えました")
             case .conversation:
-                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, ])
+                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, .mixWithOthers, .defaultToSpeaker])
                 print("✅ 会話モードに切り替えました")
             }
                 //.defaultToSpeakerは、ヘッドホンが接続されてないときにiPhoneのスピーカーを使うオプション
-            try session.setActive(true, options: .notifyOthersOnDeactivation) // ここで非同期で完了を待つオプションも検討
+            // ここではまだ setActive(true) は呼ばない！
+            try session.setActive(true) //, options: .notifyOthersOnDeactivation) // ここで非同期で完了を待つオプションも検討
+
             print("✅ アプリ起動時AudioSession設定完了")
         } catch {
             print("❌ アプリ起動時AudioSession設定エラー: \(error)")
@@ -122,8 +157,21 @@ class AudioManager: ObservableObject {
         }
 
         
-        setupAudioSessionForAppLaunch(newListenMode: self.selectedListenMode)
+//        setupAudioSessionForAppLaunch(newListenMode: self.selectedListenMode)
         setupEQ()
+//        // Now Playing コマンドセンターを設定
+//        setupRemoteCommandCenter()
+//        // Now Playing の情報を設定
+//        var nowPlayingInfo = [String : Any]()
+//        nowPlayingInfo[MPMediaItemPropertyTitle] = "補聴器"
+//        nowPlayingInfo[MPMediaItemPropertyArtist] = "アプリ動作中"
+//        // ロック画面に表示するアイコンを設定（アプリアイコンなど）
+//        if let image = UIImage(named: "AppIcon") { // "AppIcon"はアタルのアプリのアイコン名に置き換えてね
+//            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in
+//                return image
+//            }
+//        }
+//        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
     
     private func setupEQ() {
@@ -173,6 +221,18 @@ class AudioManager: ObservableObject {
 
 //        setupAudioSessionForAppLaunch()
         
+        // マイク開始時に、オーディオセッションをアクティブにする！
+//        do {
+//            let session = AVAudioSession.sharedInstance()
+//            try session.setActive(true)
+//        } catch {
+//            print("❌ AudioSessionアクティブ化エラー: \(error)")
+//            completion(false)
+//            return
+//        }
+        
+        
+        
         DispatchQueue.global(qos: .userInitiated).async {
 
             if !self.isHeadphonesConnected() {
@@ -182,7 +242,7 @@ class AudioManager: ObservableObject {
                 }
                 return
             }
-
+            
             let inputNode = self.audioEngine.inputNode
             let format = inputNode.outputFormat(forBus: 0)
             let output = self.audioEngine.outputNode
@@ -196,14 +256,18 @@ class AudioManager: ObservableObject {
 
             self.audioEngine.prepare()
 //            Thread.sleep(forTimeInterval: 0.1) // ←これを入れないと初回録音スタート（audioEngine.start()）で空振りする
-
+            
             do {
                 try self.audioEngine.start()
                 DispatchQueue.main.async {
                     self.isRunning = true
                     print("🎙️ マイク＆音量監視開始")
+
+                    print("MPNowPlayingInfoCenter設定完了")
+                    
                     completion(true)
                 }
+                
             } catch {
                 print("❌ AudioEngine起動エラー: \(error)")
                 DispatchQueue.main.async {
@@ -281,6 +345,20 @@ class AudioManager: ObservableObject {
         currentLevel = 0.0
         isRunning = false
         print("🛑 マイク停止")
+        
+//        // マイク停止時に、オーディオセッションを非アクティブにする！
+//        do {
+//            let session = AVAudioSession.sharedInstance()
+//            try session.setActive(false, options: .notifyOthersOnDeactivation)
+//        } catch {
+//            print("❌ AudioSession非アクティブ化エラー: \(error)")
+//        }
+//        
+//        // Now Playing 情報を削除
+//        DispatchQueue.main.async {
+//            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+//            print("🛑 Now Playing 情報を削除")
+//        }
     }
     
     func startMonitoringLevel() {
