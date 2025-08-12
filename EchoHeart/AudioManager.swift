@@ -57,16 +57,18 @@ class AudioManager: ObservableObject {
             setupAudioSessionForAppLaunch(newListenMode: selectedListenMode)
             if isRunning { // 録音中なら…
                 // オーディオエンジンを一度停止・リセットして、再起動する
-                self.audioEngine.stop()
-                self.audioEngine.reset()
-                isRunning = false
-                self.startMicrophone { success in
-                    if success {
-                        self.isRunning = true
-                    } else {
-                        self.stopMicrophone()
-                    }
-                }
+                self.stopMicrophone()
+//                self.audioEngine.stop()
+//                self.audioEngine.reset()
+//                isRunning = false
+                self.startMicrophone{ success in }
+//                self.startMicrophone { success in
+//                    if success {
+//                        self.isRunning = true
+//                    } else {
+//                        self.stopMicrophone()
+//                    }
+//                }
             }
             // listenModeのRaw Value（文字列）を保存する
             UserDefaults.standard.set(selectedListenMode.rawValue, forKey: "listenMode")
@@ -101,10 +103,11 @@ class AudioManager: ObservableObject {
     func setupAudioSessionForAppLaunch(newListenMode: listenMode) {
         do {
             let session = AVAudioSession.sharedInstance()
+
             switch newListenMode {
             case .ambient:
 //                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP, .mixWithOthers, .defaultToSpeaker])
-                // .mixWithOthersを入れるとロック画面に状況が表示されなくなる！！！
+//                 .mixWithOthersを入れるとロック画面に状況が表示されなくなる！！！
                 try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP, .defaultToSpeaker])
                 
                 print("✅ 環境音モードに切り替えました")
@@ -116,7 +119,9 @@ class AudioManager: ObservableObject {
                 self.updateNowPlayingInfo(title: "Echo Heart", artist: "会話モードで動作中")
             }
                 //.defaultToSpeakerは、ヘッドホンが接続されてないときにiPhoneのスピーカーを使うオプション
+            
             try session.setActive(true)
+            
             print("✅ アプリ起動時AudioSession設定完了")
             
         } catch {
@@ -200,6 +205,7 @@ class AudioManager: ObservableObject {
     
     func startMicrophone(completion: @escaping (Bool) -> Void) {
         if isRunning {
+            print("isRunning は true")
             completion(true)
             return
         }
@@ -216,17 +222,14 @@ class AudioManager: ObservableObject {
             }
             
             // ✅ 再生開始前にオーディオセッションを再度アクティブにする！
-//            do {
-//                let session = AVAudioSession.sharedInstance()
-//                try session.setActive(true)
-//            } catch {
-//                print("❌ AudioSessionアクティブ化エラー: \(error)")
-//                completion(false)
-//                return
-//            }
 //            self.setupAudioSessionForAppLaunch(newListenMode: self.selectedListenMode)
+//            do {
+//                try AVAudioSession.sharedInstance().setActive(true)
+//            } catch {
+//                
+//            }
 
-            print("startMicrophone - 0")
+
             let inputNode = self.audioEngine.inputNode
             let format = inputNode.outputFormat(forBus: 0)
             let output = self.audioEngine.outputNode
@@ -274,6 +277,7 @@ class AudioManager: ObservableObject {
         }
 
         audioEngine.reset()
+  
         currentLevel = 0.0
         isRunning = false
         print("🛑 マイク停止")

@@ -153,13 +153,7 @@ struct ContentView: View {
                             }
                             .pickerStyle(.segmented) // これでセグメンテッドコントロールになるよ
                             .padding(.horizontal, 20)
-                            //                        .onChange(of: selectedMode) { oldValue, newValue in
-                            //                                    // selectedMode が変更された時に、この中のコードが実行されるよ
-                            //                                    print("モードが \(oldValue) から \(newValue) に変わったよ！")
-                            //
-                            //                                    // ここでオーディオセッションのオプションを切り替える関数を呼ぶ
-                            //                                    // 例えば、handleModeChange(newMode: newValue) とか
-                            //                                    handleModeChange(newMode: newValue)
+                            .disabled(isMicOn) // 集音中は切り替えできないように
                         }
                         .padding(.all, vGapSlider)
                         
@@ -213,27 +207,34 @@ struct ContentView: View {
                         Spacer()
 
                     }
-                } // -----
+                }
+                .apply { view in
+                    if #unavailable(iOS 16.0) {
+                        view.padding(.top, 20)
+                            .ignoresSafeArea()
+                    } else {
+                        view // 何も変更しない
+                    }
+                }
+
                 // ✅ 設定ページへのリンク
                 VStack {
+                    Spacer()
                     HStack {
                         Spacer()
                         NavigationLink(destination: SettingsView()) {
-//                            Text("ヘルプ")
-//                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-//                                .padding()
                             Image(systemName: "info.circle")
                                 .font(.system(size: 22, weight: .bold))
                                 .foregroundColor(.echoPink)
-                                .padding(.horizontal)
-                                .padding(.top, 8)
+                                .padding()
                                 .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
                         }
                     }
-                    Spacer()
                 }
-                
+
             } // end of ZStack
+            
+
             .onChange(of: scenePhase) { newPhase in
                 if newPhase == .active {
                     // ✅ アプリがアクティブになったときに状態を同期する
@@ -281,5 +282,21 @@ struct ContentView: View {
     
 
     
+    
+}
+
+extension View {
+    @ViewBuilder
+    func apply<Content: View>(@ViewBuilder _ content: (Self) -> Content) -> some View {
+        content(self)
+    }
+    
+//    func navigationViewDestination(isPresented: Binding<Bool>, @ViewBuilder destination: @escaping () -> some View) -> some View {
+//        self.background {
+//            NavigationLink(isActive: isPresented, destination: destination) {
+//                EmptyView()
+//            }
+//        }
+//    }
     
 }
