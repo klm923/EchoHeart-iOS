@@ -10,50 +10,16 @@ func playClickSound(id: UInt32) {
 
 
 struct ContentView: View {
-    @StateObject private var audioManager = AudioManager()
+//    @StateObject private var audioManager = AudioManager()
+    @StateObject private var audioManager = AudioManager.shared
     @State private var isMicOn = false
     @State private var showNoHeadphonesAlert = false
     @State private var systemVolume: Float = AVAudioSession.sharedInstance().outputVolume
     private let volumeCheckTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     @State private var hasHeadphones = false
-//    @State private var selectedMode: listenMode = .ambient
-//    @State private var isUpsideDown: Bool = true {
-//        didSet {
-//            // isUpsideDown の値が変わったら向きを更新
-//            updateOrientation()
-//        }
-//    }
-//    
-//    private func updateOrientation() {
-//        let newOrientationMask: UIInterfaceOrientationMask // AppOrientationManagerに渡す用
-//        let preferredInterfaceOrientation: UIInterfaceOrientation // UIDevice.current.setValueに渡す用
-//
-//        if isUpsideDown {
-//            newOrientationMask = .portraitUpsideDown
-//            preferredInterfaceOrientation = .portraitUpsideDown // ここを .portraitUpsideDown にするよ！
-//        } else {
-//            newOrientationMask = .portrait
-//            preferredInterfaceOrientation = .portrait
-//        }
-//
-//        // 1. AppOrientationManager の許可する向きを更新
-//        AppOrientationManager.orientationLock = newOrientationMask
-//
-//        // 2. UIWindowScene を使って向きをリクエスト（iOS 16.0以降で推奨）
-//        // これが新しいiOSで重要！
-//        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-//            if #available(iOS 16.0, *) {
-//                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: newOrientationMask))
-//            } else {
-//                // Fallback on earlier versions
-//            }
-//        }
-//
-//        // 3. 古いAPIも使って強制的に向きをトリガー（iOS 15以前のフォールバック & iOS 16+でも強力なヒントとして）
-//        // これが、トグルで戻らない問題や、iOS 18でportraitUpsideDownが動かない問題の解決に役立つ可能性があるよ
-//        UIDevice.current.setValue(preferredInterfaceOrientation.rawValue, forKey: "orientation")
-//        UIViewController.attemptRotationToDeviceOrientation()
-//    }
+    
+    // ✅ アプリのライフサイクルを監視する
+    @Environment(\.scenePhase) private var scenePhase
 
     func handleAudioRouteChange(_ notification: Notification) {
         let session = AVAudioSession.sharedInstance()
@@ -203,15 +169,18 @@ struct ContentView: View {
                                 audioManager.stopMicrophone()
                                 playClickSound(id: 1118) // 動画の録画停止音
                                 isMicOn.toggle()
+//                                audioPlayer.pause()
                             } else {
                                 audioManager.startMicrophone { success in
                                     if success {
                                         // マイクが正常に開始された → UI更新
                                         playClickSound(id: 1117) // 動画の録画開始音
                                         self.isMicOn = true
+//                                        audioPlayer.play()
                                     } else {
                                         // エラー時のUI通知や処理
                                         self.isMicOn = false
+//                                        audioPlayer.pause()
                                         showNoHeadphonesAlert = true
                                         print("⚠️ マイク起動に失敗しました")
                                     }
@@ -229,16 +198,7 @@ struct ContentView: View {
                                                     .clipShape(Circle())
                                                     .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
                                                     .scaleEffect(2.0)
-    //                        Label(isMicOn ? "マイク オフ" : "マイク オン", systemImage: isMicOn ? "mic.slash.fill" : "mic.fill")
-    //                            .font(.title)
-    //                            .padding()
-    //                            .labelStyle(.iconOnly)
-    //                            .frame(width: 128, height: 128)
                         }
-    //                    .buttonStyle(.borderedProminent)
-    //                    .tint(isMicOn ? .echoPink : .echoBlue)
-    //                    .shadow(color: .black.opacity(0.2), radius: 4, x: 2, y: 2)
-    //                    .padding(.all, 50)
                         .disabled(!hasHeadphones)
                         .alert("⚠️ ヘッドホン未接続", isPresented: $showNoHeadphonesAlert) {
                         } message: {
@@ -249,9 +209,13 @@ struct ContentView: View {
                     
                     Spacer()
                 }
-//                .onAppear {
-//                    print("geometry.size.height: \(geometry.size.height)")
-//                }
+            }
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                // ✅ アプリがアクティブになったときに状態を同期する
+                print("アプリがアクティブになりました")
+                isMicOn = audioManager.isAudioEngineRunning
             }
         }
         .onAppear {
@@ -267,6 +231,7 @@ struct ContentView: View {
             ) { notification in
                 handleAudioRouteChange(notification)
             }
+            isMicOn = audioManager.isAudioEngineRunning
 
         }
         .onDisappear {
@@ -274,17 +239,6 @@ struct ContentView: View {
             NotificationCenter.default.removeObserver(self,
                 name: AVAudioSession.routeChangeNotification,
                 object: nil)
-            // Viewが非表示になったら、向きの制限を解除する（念のため）
-//            AppOrientationManager.orientationLock = .all
-//            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-//                if #available(iOS 16.0, *) {
-//                    windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .all))
-//                } else {
-//                    // Fallback on earlier versions
-//                }
-//            }
-//            UIDevice.current.setValue(UIInterfaceOrientation.unknown.rawValue, forKey: "orientation")
-//            UIViewController.attemptRotationToDeviceOrientation()
         }
         .onReceive(volumeCheckTimer) { _ in
             let current = AVAudioSession.sharedInstance().outputVolume

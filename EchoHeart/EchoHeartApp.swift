@@ -9,9 +9,7 @@ import SwiftUI
 
 @main
 struct EchoHeartApp: App {
-    
-//    @UIApplicationDelegateAdaptor(AppOrientationManager.self) var appDelegateManager
-    
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     var body: some Scene {
         WindowGroup {

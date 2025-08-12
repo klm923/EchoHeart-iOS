@@ -2,9 +2,10 @@ import AVFoundation
 import Accelerate
 import Combine
 import NotificationCenter
-//import MediaPlayer
+import MediaPlayer
 
 class AudioManager: ObservableObject {
+    static let shared = AudioManager()
     private var audioEngine = AVAudioEngine()
     //    private var eqNode = AVAudioUnitEQ(numberOfBands: 1)
     // 修正後（バンド数を3つ指定する）
@@ -72,56 +73,52 @@ class AudioManager: ObservableObject {
         }
     }
     
-//    private func setupRemoteCommandCenter() {
-//        let commandCenter = MPRemoteCommandCenter.shared()
-//        
-//        commandCenter.playCommand.isEnabled = true
-//        commandCenter.playCommand.addTarget { [weak self] _ in
-//            guard let self = self else { return .commandFailed }
-//            if !self.isRunning {
-//                self.startMicrophone { success in } // 起動成功の確認は省略
-//            }
-//            return .success
-//        }
-//        
-//        commandCenter.pauseCommand.isEnabled = true
-//        commandCenter.pauseCommand.addTarget { [weak self] _ in
-//            guard let self = self else { return .commandFailed }
-//            if self.isRunning {
-//                self.stopMicrophone()
-//            }
-//            return .success
-//        }
-//        
-//        // その他必要なコマンドも追加
-//        commandCenter.togglePlayPauseCommand.isEnabled = true
-//        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
-//            guard let self = self else { return .commandFailed }
-//            if self.isRunning {
-//                self.stopMicrophone()
-//            } else {
-//                self.startMicrophone { success in }
-//            }
-//            return .success
-//        }
-//    }
+    // audioEngineが動いているかどうかの新しいプロパティ
+    var isAudioEngineRunning: Bool {
+        return audioEngine.isRunning
+    }
+    
+    private func setupRemoteCommandCenter() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+        
+        commandCenter.playCommand.isEnabled = false
+        commandCenter.playCommand.removeTarget(nil)
+        
+        commandCenter.pauseCommand.isEnabled = true
+        commandCenter.pauseCommand.addTarget { [weak self] _ in
+            guard let self = self else { return .commandFailed }
+            if self.isRunning {
+                self.stopMicrophone()
+            }
+            return .success
+        }
+        
+        // その他必要なコマンドも追加
+        commandCenter.togglePlayPauseCommand.isEnabled = false
+        commandCenter.togglePlayPauseCommand.removeTarget(nil)
+    }
     
     func setupAudioSessionForAppLaunch(newListenMode: listenMode) {
         do {
             let session = AVAudioSession.sharedInstance()
             switch newListenMode {
             case .ambient:
-                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP, .mixWithOthers, .defaultToSpeaker])
+//                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP, .mixWithOthers, .defaultToSpeaker])
+                // .mixWithOthersを入れるとロック画面に状況が表示されなくなる！！！
+                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP, .defaultToSpeaker])
+                
                 print("✅ 環境音モードに切り替えました")
+                self.updateNowPlayingInfo(title: "Echo Heart", artist: "環境モードで動作中")
             case .conversation:
-                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, .mixWithOthers, .defaultToSpeaker])
+//                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, .mixWithOthers, .defaultToSpeaker])
+                try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, .defaultToSpeaker])
                 print("✅ 会話モードに切り替えました")
+                self.updateNowPlayingInfo(title: "Echo Heart", artist: "会話モードで動作中")
             }
                 //.defaultToSpeakerは、ヘッドホンが接続されてないときにiPhoneのスピーカーを使うオプション
-            // ここではまだ setActive(true) は呼ばない！
-            try session.setActive(true) //, options: .notifyOthersOnDeactivation) // ここで非同期で完了を待つオプションも検討
-
+//            try session.setActive(true)
             print("✅ アプリ起動時AudioSession設定完了")
+            
         } catch {
             print("❌ アプリ起動時AudioSession設定エラー: \(error)")
         }
@@ -157,21 +154,9 @@ class AudioManager: ObservableObject {
         }
 
         
-//        setupAudioSessionForAppLaunch(newListenMode: self.selectedListenMode)
         setupEQ()
-//        // Now Playing コマンドセンターを設定
-//        setupRemoteCommandCenter()
-//        // Now Playing の情報を設定
-//        var nowPlayingInfo = [String : Any]()
-//        nowPlayingInfo[MPMediaItemPropertyTitle] = "補聴器"
-//        nowPlayingInfo[MPMediaItemPropertyArtist] = "アプリ動作中"
-//        // ロック画面に表示するアイコンを設定（アプリアイコンなど）
-//        if let image = UIImage(named: "AppIcon") { // "AppIcon"はアタルのアプリのアイコン名に置き換えてね
-//            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in
-//                return image
-//            }
-//        }
-//        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        // Now Playing コマンドセンターを設定
+        setupRemoteCommandCenter()
     }
     
     private func setupEQ() {
@@ -219,19 +204,6 @@ class AudioManager: ObservableObject {
             return
         }
 
-//        setupAudioSessionForAppLaunch()
-        
-        // マイク開始時に、オーディオセッションをアクティブにする！
-//        do {
-//            let session = AVAudioSession.sharedInstance()
-//            try session.setActive(true)
-//        } catch {
-//            print("❌ AudioSessionアクティブ化エラー: \(error)")
-//            completion(false)
-//            return
-//        }
-        
-        
         
         DispatchQueue.global(qos: .userInitiated).async {
 
@@ -243,6 +215,18 @@ class AudioManager: ObservableObject {
                 return
             }
             
+            // ✅ 再生開始前にオーディオセッションを再度アクティブにする！
+//            do {
+//                let session = AVAudioSession.sharedInstance()
+//                try session.setActive(true)
+//            } catch {
+//                print("❌ AudioSessionアクティブ化エラー: \(error)")
+//                completion(false)
+//                return
+//            }
+//            self.setupAudioSessionForAppLaunch(newListenMode: self.selectedListenMode)
+
+            print("startMicrophone - 0")
             let inputNode = self.audioEngine.inputNode
             let format = inputNode.outputFormat(forBus: 0)
             let output = self.audioEngine.outputNode
@@ -261,7 +245,9 @@ class AudioManager: ObservableObject {
                 try self.audioEngine.start()
                 DispatchQueue.main.async {
                     self.isRunning = true
+                    
                     print("🎙️ マイク＆音量監視開始")
+                    self.updateNowPlayingInfo(title: "Echo Heart", artist: self.selectedListenMode == .ambient ? "環境モードで動作中" : "会話モードで動作中")
 
                     print("MPNowPlayingInfoCenter設定完了")
                     
@@ -277,88 +263,21 @@ class AudioManager: ObservableObject {
         }
     }
     
-//    func processAudioBuffer(buffer: AVAudioPCMBuffer) {
-//        guard let channelData = buffer.floatChannelData?[0] else { return }
-//        let frameCount = Int(buffer.frameLength)
-//        var window = [Float](repeating: 0, count: frameCount)
-//        var spectrum = [Float](repeating: 0.0, count: barCount)
-//        
-//        // Hannウィンドウで滑らかに
-//        vDSP_hann_window(&window, vDSP_Length(frameCount), Int32(vDSP_HANN_NORM))
-//        var samples = [Float](repeating: 0.0, count: frameCount)
-//        vDSP_vmul(channelData, 1, window, 1, &samples, 1, vDSP_Length(frameCount))
-//        
-//        // FFT用に複素数へ変換
-//        let log2n = UInt(round(log2(Float(frameCount))))
-//        let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2))!
-//        var realp = [Float](repeating: 0.0, count: frameCount / 2)
-//        var imagp = [Float](repeating: 0.0, count: frameCount / 2)
-//        
-//        realp.withUnsafeMutableBufferPointer { realPointer in
-//            imagp.withUnsafeMutableBufferPointer { imagPointer in
-//                var splitComplex = DSPSplitComplex(realp: realPointer.baseAddress!, imagp: imagPointer.baseAddress!)
-//                
-//                samples.withUnsafeMutableBufferPointer { ptr in
-//                    ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: frameCount) { complexPtr in
-//                        vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(frameCount / 2))
-//                    }
-//                }
-//                
-//                // FFT実行
-//                vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
-//                
-//                // パワースペクトラムに変換
-//                var magnitudes = [Float](repeating: 0.0, count: frameCount / 2)
-//                vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(frameCount / 2))
-//                
-//                // ここでspectrum計算（バンド分け）
-//                let bandSize = magnitudes.count / barCount
-//                for i in 0..<barCount {
-//                    let start = i * bandSize
-//                    let end = start + bandSize
-//                    let slice = magnitudes[start..<min(end, magnitudes.count)]
-//                    let avg = sqrt(slice.reduce(0, +) / Float(slice.count))
-//                    spectrum[i] = min(max(avg * 3, 0), 1)
-//                    //                    print("Band \(i): avg = \(avg), scaled = \(avg * 3)")
-//                }
-//                
-//                DispatchQueue.main.async {
-//                    for i in 1..<self.barCount {
-//                        // 旧値に対して重みを加えて更新（α=0.2くらい）
-//                        let current = self.spectrumLevels[i]
-//                        self.spectrumLevels[i] = current * 0.8 + spectrum[i] * 0.2
-//                    }
-//                }
-//            }
-//        }
-//        
-//        
-//        vDSP_destroy_fftsetup(fftSetup)
-//        
-//    }
-    
+   
     func stopMicrophone() {
         if !isRunning { return }
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
+        DispatchQueue.main.async {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil // ✅ 情報を削除
+            print("🛑 Now Playing 情報を削除")
+        }
+
         audioEngine.reset()
         currentLevel = 0.0
         isRunning = false
         print("🛑 マイク停止")
         
-//        // マイク停止時に、オーディオセッションを非アクティブにする！
-//        do {
-//            let session = AVAudioSession.sharedInstance()
-//            try session.setActive(false, options: .notifyOthersOnDeactivation)
-//        } catch {
-//            print("❌ AudioSession非アクティブ化エラー: \(error)")
-//        }
-//        
-//        // Now Playing 情報を削除
-//        DispatchQueue.main.async {
-//            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-//            print("🛑 Now Playing 情報を削除")
-//        }
     }
     
     func startMonitoringLevel() {
@@ -404,6 +323,7 @@ class AudioManager: ObservableObject {
         }
     }
 
+    
     // 正規化（dBを0〜1に変換）
     private func normalizedPowerLevel(from decibels: Float) -> Float {
         let minDb: Float = -80
@@ -416,3 +336,33 @@ class AudioManager: ObservableObject {
         }
     }
 }
+
+
+extension AudioManager {
+    func updateNowPlayingInfo(title: String,
+                              artist: String = "Unknown Artist",) {
+
+        var nowPlayingInfo = [String: Any]()
+
+        nowPlayingInfo[MPMediaItemPropertyTitle] = title
+        nowPlayingInfo[MPMediaItemPropertyArtist] = artist
+
+        if let image = UIImage(named: "NowPlayingArtwork") { // "AppIcon"はアタルのアプリのアイコン名に置き換えてね
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in
+                return image
+            }
+        }
+
+        // AVAudioPlayer 用に再生時間を設定
+        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = NSNumber(value: Float.greatestFiniteMagnitude)
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = 0.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isRunning ? 1.0 : 0.0
+
+        // メインスレッドで確実に更新する
+        DispatchQueue.main.async {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        }
+    }
+
+}
+
