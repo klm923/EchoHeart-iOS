@@ -116,7 +116,7 @@ class AudioManager: ObservableObject {
                 self.updateNowPlayingInfo(title: "Echo Heart", artist: "会話モードで動作中")
             }
                 //.defaultToSpeakerは、ヘッドホンが接続されてないときにiPhoneのスピーカーを使うオプション
-//            try session.setActive(true)
+            try session.setActive(true)
             print("✅ アプリ起動時AudioSession設定完了")
             
         } catch {
