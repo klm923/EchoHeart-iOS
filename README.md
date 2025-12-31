@@ -26,3 +26,6 @@
 ## 🪪 ライセンス
 MIT License
 
+## Support
+ご質問や不具合報告は、以下のメールアドレスまでお問い合わせください。
+[klm923.apple@gmail.com]
